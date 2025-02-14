@@ -38,8 +38,8 @@ load("rs_data.RData")
 # Why did some of the artist-song fail to match up?
 
 #ANSWER
-
-
+rs_joined_orig <- full_join(rs_old, rs_new, by = c("Artist", "Song"))
+nrow(rs_joined_orig)
 
 ### Question 2 ---------- 
 
@@ -50,6 +50,11 @@ load("rs_data.RData")
 # Make Rank and Year into integer variables for rs_old before binding them into rs_all
 
 #ANSWER
+rs_old$Rank <- as.integer(rs_old$Rank)
+rs_old$Year <- as.integer(rs_old$Year)
+rs_old <- rs_old %>% mutate(Source = "Old")
+rs_new <- rs_new %>% mutate(Source = "New")
+rs_all <- bind_rows(rs_new, rs_old)
 
 
 ### Question 3 ----------
@@ -62,6 +67,14 @@ load("rs_data.RData")
 # Use both functions to make all artists/song lowercase and remove any extra spaces
 
 #ANSWER
+rs_all <- rs_all %>% mutate(Artist = str_remove_all(Artist, "The"),
+                            Artist = str_replace_all(Artist, "&", "and"),
+                            Artist = str_remove_all(Artist, "[:punct:]"),
+                            Artist = str_to_lower(str_trim(Artist)),
+                            Song = str_remove_all(Song, "The"),
+                            Song = str_replace_all(Song, "&", "and"),
+                            Song = str_remove_all(Song, "[:punct:]"),
+                            Song = str_to_lower(str_trim(Song)))
 
 
 ### Question 4 ----------
@@ -75,6 +88,10 @@ load("rs_data.RData")
 # in the new rs_joined compared to the original. Use nrow to check (there should be 799 rows)
 
 #ANSWER
+rs_new2 <- rs_all %>% filter(Source == "New")
+rs_old2 <- rs_all %>% filter(Source == "Old")
+rs_joined <- full_join(rs_new2, rs_old2, by = c("Artist", "Song"), suffix = c("_Old","_New"))
+nrow(rs_joined)
 
 
 ### Question 5 ----------
@@ -88,7 +105,11 @@ load("rs_data.RData")
 # You should now be able to see how each song moved up/down in rankings between the two lists
 
 #ANSWER
-
+rs_joined <- rs_joined %>% 
+  select(-c("Source_Old", "Source_New")) %>% 
+  filter(!is.na(Rank_New), !is.na(Rank_Old)) %>% 
+  mutate(Rank_Change = Rank_Old - Rank_New) %>% 
+  arrange(Rank_Change)
 
 ### Question 6 ----------
 
@@ -99,8 +120,13 @@ load("rs_data.RData")
 # Which decade improved the most?
 
 #ANSWER
+rs_joined <- rs_joined %>% 
+  mutate(Decade = floor(Year_New/10)*10,
+         Decade = factor(paste0(Decade, "s")))
 
-
+rs_joined %>% group_by(Decade) %>% 
+  summarize(M_Change = mean(Rank_Change, na.rm =TRUE))
+#1950s
 
 ### Question 7 ----------
 
@@ -110,7 +136,8 @@ load("rs_data.RData")
 # proportion of songs in each of the top three decades (vs. all the rest)
 
 #ANSWER
-
+fct_count(rs_joined$Decade)
+fct_count(fct_lump(rs_joined$Decade, 3), prop = T)
 
 
 ### Question 8 ---------- 
@@ -120,7 +147,8 @@ load("rs_data.RData")
 # Use parse_date_time to fix it
 
 #ANSWER
-
+top20 <- read_csv("top_20.csv")
+top20 <- top20 %>% mutate(Release_Date = parse_date_time(Release, "%d-%b-%Y"))
 
 ### Question 9 --------
 
@@ -129,7 +157,7 @@ load("rs_data.RData")
 # overwrite top20 with the pivoted data (there should now be 20 rows!)
 
 #ANSWER
-
+top20 <- top20 %>% pivot_wider(names_from = "Style", values_from = "Value")
 
 
 ### Question 10 ---------
@@ -143,7 +171,14 @@ load("rs_data.RData")
 # Count the number of songs that were released in each season
 
 #ANSWER
-
+top20 <- left_join(top20, rs_joined, by = c("Artist","Song"))
+top20 <- top20 %>% mutate(Release_Month = month(Release_Date, label = T),
+                          Season = fct_collapse(Release_Month,
+                                                Winter = c("Dec", "Jan","Feb"),
+                                                Spring = c("Mar","Apr","May"),
+                                                Summer = c("Jun", "Jul","Aug"),
+                                                Fall = c("Sep", "Oct", "Nov")))
+fct_count(top20$Season)
 
 
 ### Question 11 ---------
@@ -154,6 +189,7 @@ load("rs_data.RData")
 # Figure out which is the top-ranked song (from Rank_New) that used a minor key
 
 #ANSWER
-
+top20 <- top20 %>% mutate(Quality = factor(ifelse(str_detect(Key, "m"), "Minor", "Major")))
+top20 %>% filter(Quality == "Minor") %>% slice_min(Rank_New)
 
 
